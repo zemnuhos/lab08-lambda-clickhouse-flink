@@ -1,0 +1,29 @@
+version: 2
+
+models:
+  - name: mart_transactions_hourly
+    description: "Распределение транзакций по часам. Строится только по чистому fact_transactions, без quarantined-дублей."
+
+  - name: mart_purchases_hourly
+    description: "Количество и сумма успешных покупок по часам. Покупка = transaction_type = purchase AND status = completed."
+
+  - name: mart_revenue_daily
+    description: "Дневная выручка в TGRK: gross revenue, matched refunds и net revenue. Ambiguous/unmatched refunds выводятся отдельно."
+
+  - name: mart_promo_usage
+    description: "Использование промокодов: usage vs max_uses, просроченные применения, revenue."
+
+  - name: mart_traffic_source_daily
+    description: "Разрез тестовых и реальных пользователей с gross/net revenue."
+
+  - name: mart_currency_daily
+    description: "Разбивка транзакций и покупок по валютам с пересчетом в TGRK."
+
+  - name: mart_cancellations_daily
+    description: "Отмены: количество, причины, match_status, среднее время до отмены и cancellation rate."
+
+  - name: mart_user_cohorts
+    description: "Когорты пользователей по первой успешной покупке."
+
+  - name: mart_data_quality_daily
+    description: "Витрина качества данных: дубли, quarantined-дубли, пустые пользователи, неизвестные справочники, курсы и статусы отмен."

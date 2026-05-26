@@ -1,0 +1,235 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: lab08-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-analytics}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT}:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
+      - ./data/samples:/data/samples:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  airflow-postgres:
+    image: postgres:16.3
+    container_name: lab08-airflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  airflow-init:
+    build:
+      context: ./airflow
+    container_name: lab08-airflow-init
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    env_file: .env
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - ./airflow/scripts:/opt/airflow/scripts
+      - ./dbt:/opt/airflow/dbt
+    command: >
+      bash -c "airflow db migrate &&
+      airflow users create
+      --username $${AIRFLOW_ADMIN_USER:-airflow}
+      --password $${AIRFLOW_ADMIN_PASSWORD:-airflow}
+      --firstname Airflow
+      --lastname Admin
+      --role Admin
+      --email $${AIRFLOW_ADMIN_EMAIL:-airflow@example.com} || true &&
+      bash /opt/airflow/scripts/create_clickhouse_connection.sh
+      "
+
+  airflow-webserver:
+    build:
+      context: ./airflow
+    container_name: lab08-airflow-webserver
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    env_file: .env
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - ./data:/opt/airflow/data
+      - ./dbt:/opt/airflow/dbt
+    ports:
+      - "8080:8080"
+    command: airflow webserver
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:8080/health || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+
+  airflow-scheduler:
+    build:
+      context: ./airflow
+    container_name: lab08-airflow-scheduler
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    env_file: .env
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - ./data:/opt/airflow/data
+      - ./dbt:/opt/airflow/dbt
+    command: airflow scheduler
+
+  superset-init:
+    build:
+      context: ./superset
+    container_name: lab08-superset-init
+    depends_on:
+      - clickhouse
+    environment:
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-change_me}
+
+      SUPERSET_ADMIN_USER: ${SUPERSET_ADMIN_USER:-admin}
+      SUPERSET_ADMIN_PASSWORD: ${SUPERSET_ADMIN_PASSWORD:-admin}
+      SUPERSET_ADMIN_FIRSTNAME: ${SUPERSET_ADMIN_FIRSTNAME:-Superset}
+      SUPERSET_ADMIN_LASTNAME: ${SUPERSET_ADMIN_LASTNAME:-Admin}
+      SUPERSET_ADMIN_EMAIL: ${SUPERSET_ADMIN_EMAIL:-admin@example.com}
+
+      CLICKHOUSE_HOST: ${CLICKHOUSE_HOST:-clickhouse}
+      CLICKHOUSE_HTTP_PORT: ${CLICKHOUSE_HTTP_PORT:-8123}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-default}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+      SUPERSET_CLICKHOUSE_DATABASE_NAME: ${SUPERSET_CLICKHOUSE_DATABASE_NAME:-ClickHouse}
+
+      SUPERSET_ASSETS_DIR: /app/superset_assets
+    volumes:
+      - superset_home:/app/superset_home
+      - ./superset/superset_config.py:/app/pythonpath/superset_config.py
+      - ./superset/assets:/app/superset_assets
+    command: ["/app/scripts/init-superset.sh"]
+
+  superset:
+    build:
+      context: ./superset
+    container_name: lab08-superset
+    depends_on:
+      superset-init:
+        condition: service_completed_successfully
+    ports:
+      - "8088:8088"
+    environment:
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-change_me}
+    volumes:
+      - superset_home:/app/superset_home
+      - ./superset/superset_config.py:/app/pythonpath/superset_config.py
+      - ./superset/assets:/app/superset_assets
+    command: >
+      /bin/bash -c "superset run -h 0.0.0.0 -p 8088"
+
+  flink-jobmanager:
+    image: flink:1.19.1-java17
+    container_name: lab08-flink-jobmanager
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8081:8081"
+    command: jobmanager
+    environment:
+      JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+    volumes:
+      - flink_checkpoints:/tmp/flink-checkpoints
+
+  flink-taskmanager:
+    image: flink:1.19.1-java17
+    container_name: lab08-flink-taskmanager
+    restart: unless-stopped
+    depends_on:
+      - flink-jobmanager
+      - clickhouse
+    env_file: .env
+    command: taskmanager
+    environment:
+      JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+      TASK_MANAGER_NUMBER_OF_TASK_SLOTS: 2
+    volumes:
+      - flink_checkpoints:/tmp/flink-checkpoints
+
+  stream-init:
+    image: maven:3.9.9-eclipse-temurin-17
+    container_name: lab08-stream-init
+    depends_on:
+      - flink-jobmanager
+      - flink-taskmanager
+    volumes:
+      - ./flink/jobs/lab08-stream-job:/workspace
+      - ./flink/jobs:/output
+      - maven_repo:/root/.m2
+    working_dir: /workspace
+    command: >
+      bash -c "mvn -DskipTests package &&
+      cp target/lab08-stream-job-1.0.0.jar /output/lab08-stream-job.jar"
+
+  flink-stream-job-submit:
+    image: flink:1.19.1-java17
+    container_name: lab08-flink-stream-job-submit
+    depends_on:
+      stream-init:
+        condition: service_completed_successfully
+      flink-jobmanager:
+        condition: service_started
+      flink-taskmanager:
+        condition: service_started
+    env_file: .env
+    volumes:
+      - ./flink/jobs:/tmp/flink-jobs:ro
+    command: >
+      bash -c "flink run -m flink-jobmanager:8081 -d
+      -c ru.lab08.stream.Lab08StreamJob
+      /tmp/flink-jobs/lab08-stream-job.jar
+      2> >(grep -v 'WARNING: Unknown module: jdk.compiler specified to --add-exports' >&2)"
+
+  dbt:
+    image: ghcr.io/kestra-io/dbt-clickhouse:latest
+    container_name: lab08-dbt
+    restart: unless-stopped
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    env_file: .env
+    working_dir: /opt/dbt
+    volumes:
+      - ./dbt:/opt/dbt
+    command: tail -f /dev/null    
+
+volumes:
+  clickhouse_data:
+  airflow_postgres_data:
+  airflow_logs:
+  superset_home:
+  flink_checkpoints:
+  maven_repo:  

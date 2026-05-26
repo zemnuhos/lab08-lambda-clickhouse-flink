@@ -1,0 +1,51 @@
+version: 2
+
+models:
+  - name: dim_users
+    description: "Справочник пользователей с признаком тестового пользователя."
+    columns:
+      - name: user_key
+        tests: [not_null, unique]
+      - name: user_uuid
+        tests: [not_null]
+
+  - name: dim_promo_codes
+    description: "Статический справочник промокодов."
+    columns:
+      - name: promo_code_id
+        tests: [not_null, unique]
+
+  - name: dim_exchange_rates
+    description: "Интервальная таблица актуальности курсов валют к TGRK."
+    columns:
+      - name: rate_key
+        tests: [not_null, unique]
+      - name: currency
+        tests: [not_null]
+      - name: valid_from
+        tests: [not_null]
+      - name: valid_to
+        tests: [not_null]
+
+  - name: fact_transactions
+    description: "Чистый факт транзакций. Коллизии transaction_id исключены и вынесены в dq_transactions_duplicate."
+    columns:
+      - name: transaction_nk
+        tests: [not_null, unique]
+      - name: created_at
+        tests: [not_null]
+
+  - name: fact_cancellations
+    description: "Факт отмен из batch-источника."
+    columns:
+      - name: cancellation_nk
+        tests: [not_null, unique]
+
+  - name: fact_cancellation_matches
+    description: "Результат сопоставления отмен с транзакциями: matched / ambiguous / unmatched."
+    columns:
+      - name: cancellation_nk
+        tests: [not_null, unique]
+
+  - name: dq_transactions_duplicate
+    description: "Карантин транзакций с коллизией transaction_id/transaction_nk. Эти строки не участвуют в бизнес-витринах."

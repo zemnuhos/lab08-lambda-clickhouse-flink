@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: analytics
+    schema: analytics
+    tables:
+      - name: raw_transactions
+      - name: raw_cancellations
+      - name: raw_exchange_rates
+      - name: raw_users
+      - name: raw_test_users
+      - name: raw_promo_codes

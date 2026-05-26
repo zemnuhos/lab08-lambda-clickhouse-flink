@@ -1,0 +1,38 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# macOS / IDE
+.DS_Store
+__MACOSX/
+.idea/
+.vscode/
+*.iml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Airflow
+airflow/logs/
+logs/
+*.log
+
+# dbt
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+dbt/.user.yml
+
+# Flink / Maven
+flink/jobs/*/target/
+flink/jobs/*.jar
+flink/jobs/*/.m2/
+
+# Local temp files
+*.tmp
+*.bak
+

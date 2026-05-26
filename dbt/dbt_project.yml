@@ -1,0 +1,15 @@
+name: lab08
+version: 1.0
+profile: lab08
+
+model-paths:
+  - models
+
+models:
+  lab08:
+    staging:
+      +materialized: view
+    core:
+      +materialized: table
+    marts:
+      +materialized: table
