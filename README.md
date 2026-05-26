@@ -74,23 +74,45 @@ Kafka в `docker-compose.yml` не поднимается, использует�
 
 ## Быстрый запуск
 
-1. Скопируйте пример переменных окружения:
+1. Клонируйте репозиторий:
+
+```bash
+git clone https://github.com/zemnuhos/lab08-lambda-clickhouse-flink.git
+cd lab08-lambda-clickhouse-flink
+```
+
+2. Авторизуйтесь в GitHub Container Registry.
+
+```bash
+echo <GITHUB_PAT> | docker login ghcr.io -u <GITHUB_USERNAME> --password-stdin
+```
+Где:
+- `<GITHUB_USERNAME>` — GitHub username
+- `<GITHUB_PAT>` — Personal Access Token
+
+3. Скачайте опубликованный образ
+
+```bash
+docker compose pull
+```
+
+4. Скопируйте пример переменных окружения:
 
 ```bash
 cp .env.example .env
 ```
 
-2. При необходимости поправьте значения в `.env`.
+5. При необходимости поправьте значения в `.env`.
 
 Минимально для локальной проверки можно оставить значения по умолчанию.
 
-3. Запустите весь стек одной командой:
+6. Запустите весь стек одной командой:
 
 ```bash
 docker compose up -d --build
 ```
 
-4. Проверьте контейнеры:
+7. Проверьте контейнеры:
 
 ```bash
 docker compose ps
@@ -98,13 +120,13 @@ docker compose ps
 
 Ожидаемо должны подняться контейнеры ClickHouse, Airflow, Superset, Flink JobManager, Flink TaskManager, dbt и init/submit-сервисы.
 
-5. Перейти в Airflow UI (ссылка на UI ниже) и включить DAG `lab08_raw_ingestion` и подождать, пока прогрузятся сырые данные.
+8. Перейти в Airflow UI (ссылка на UI ниже) и включить DAG `lab08_raw_ingestion` и подождать, пока прогрузятся сырые данные.
 
-6. Включить DAG `lab08_marts` и подождать, пока заполнится хранилище.  
+9. Включить DAG `lab08_marts` и подождать, пока заполнится хранилище.  
 
-7. Проверить в Flink UI, что Job `lab08-kafka-to-clickhouse-rt` появился и находится в статусе "RUNNING".
+10. Проверить в Flink UI, что Job `lab08-kafka-to-clickhouse-rt` появился и находится в статусе "RUNNING".
 
-8. Открыть Superset UI и выбрать интересующий дашборд.
+11. Открыть Superset UI и выбрать интересующий дашборд.
 
 ## Интерфейсы
 
