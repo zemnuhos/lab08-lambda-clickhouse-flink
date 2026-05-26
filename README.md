@@ -90,29 +90,23 @@ echo <GITHUB_PAT> | docker login ghcr.io -u <GITHUB_USERNAME> --password-stdin
 - `<GITHUB_USERNAME>` — GitHub username
 - `<GITHUB_PAT>` — Personal Access Token
 
-3. Скачайте опубликованный образ
-
-```bash
-docker compose pull
-```
-
-4. Скопируйте пример переменных окружения:
+3. Скопируйте пример переменных окружения:
 
 ```bash
 cp .env.example .env
 ```
 
-5. При необходимости поправьте значения в `.env`.
+4. При необходимости поправьте значения в `.env`.
 
 Минимально для локальной проверки можно оставить значения по умолчанию.
 
-6. Запустите весь стек одной командой:
+5. Запустите весь стек одной командой:
 
 ```bash
 docker compose up -d --build
 ```
 
-7. Проверьте контейнеры:
+6. Проверьте контейнеры:
 
 ```bash
 docker compose ps
@@ -120,13 +114,13 @@ docker compose ps
 
 Ожидаемо должны подняться контейнеры ClickHouse, Airflow, Superset, Flink JobManager, Flink TaskManager, dbt и init/submit-сервисы.
 
-8. Перейти в Airflow UI (ссылка на UI ниже) и включить DAG `lab08_raw_ingestion` и подождать, пока прогрузятся сырые данные.
+7. Перейти в Airflow UI (ссылка на UI ниже) и включить DAG `lab08_raw_ingestion` и подождать, пока прогрузятся сырые данные.
 
-9. Включить DAG `lab08_marts` и подождать, пока заполнится хранилище.  
+8. Включить DAG `lab08_marts` и подождать, пока заполнится хранилище.  
 
-10. Проверить в Flink UI, что Job `lab08-kafka-to-clickhouse-rt` появился и находится в статусе "RUNNING".
+9. Проверить в Flink UI, что Job `lab08-kafka-to-clickhouse-rt` появился и находится в статусе "RUNNING".
 
-11. Открыть Superset UI и выбрать интересующий дашборд.
+10. Открыть Superset UI и выбрать интересующий дашборд.
 
 ## Интерфейсы
 
