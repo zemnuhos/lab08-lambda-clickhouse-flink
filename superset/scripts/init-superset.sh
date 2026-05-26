@@ -21,10 +21,10 @@ superset fab create-admin \
 echo "Initializing Superset roles and permissions..."
 superset init
 
-echo "Creating ClickHouse connection..."
-/app/scripts/create-clickhouse-connection.sh
-
 echo "Importing Superset assets..."
 /app/scripts/import-superset-assets.sh
+
+echo "Creating ClickHouse connection..."
+/app/scripts/create-clickhouse-connection.sh
 
 echo "Superset initialization completed."
