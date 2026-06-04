@@ -8,8 +8,11 @@ import boto3
 import requests
 from airflow.decorators import dag, task
 from airflow.hooks.base import BaseHook
+from functools import lru_cache
+
 from botocore import UNSIGNED
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 
 CLICKHOUSE_CONN_ID = os.getenv(
@@ -17,9 +20,25 @@ CLICKHOUSE_CONN_ID = os.getenv(
     "clickhouse_conn",
 )
 
-S3_BUCKET = "npl-de18-lab8-data"
+S3_BUCKET = os.getenv("S3_BUCKET")
 
-S3_ENDPOINT = "https://storage.yandexcloud.net"
+S3_ENDPOINT = os.getenv(
+    "S3_ENDPOINT_URL",
+    "https://storage.yandexcloud.net",
+)
+
+S3_REGION = os.getenv(
+    "S3_REGION",
+    "ru-central1",
+)
+
+S3_AUTH_MODE = os.getenv(
+    "S3_AUTH_MODE",
+    "auto",
+).lower()
+
+S3_ACCESS_KEY_ID = os.getenv("S3_ACCESS_KEY_ID")
+S3_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_ACCESS_KEY")
 
 TRANSACTION_BATCH_SIZE = 200
 CANCELLATION_BATCH_SIZE = 50
@@ -28,17 +47,111 @@ EXCHANGE_RATE_BATCH_SIZE = 50
 LOGGER = logging.getLogger(__name__)
 
 
-def get_s3_client():
-    """
-    Public S3 bucket access.
-    Credentials are not required.
-    """
+def _create_public_s3_client():
+    return boto3.client(
+        "s3",
+        endpoint_url=S3_ENDPOINT,
+        region_name=S3_REGION,
+        config=Config(signature_version=UNSIGNED),
+    )
+
+
+def _create_private_s3_client():
+    if not S3_ACCESS_KEY_ID or not S3_SECRET_ACCESS_KEY:
+        raise ValueError(
+            "S3 bucket is private, but S3_ACCESS_KEY_ID or "
+            "S3_SECRET_ACCESS_KEY is not set in .env"
+        )
 
     return boto3.client(
         "s3",
         endpoint_url=S3_ENDPOINT,
-        config=Config(signature_version=UNSIGNED),
+        region_name=S3_REGION,
+        aws_access_key_id=S3_ACCESS_KEY_ID,
+        aws_secret_access_key=S3_SECRET_ACCESS_KEY,
+        config=Config(signature_version="s3v4"),
     )
+
+
+def _can_list_bucket(s3_client) -> bool:
+    try:
+        s3_client.list_objects_v2(
+            Bucket=S3_BUCKET,
+            MaxKeys=1,
+        )
+
+        return True
+
+    except ClientError as e:
+        error_code = e.response.get(
+            "Error",
+            {},
+        ).get("Code")
+
+        if error_code in (
+            "403",
+            "AccessDenied",
+            "Unauthorized",
+            "InvalidAccessKeyId",
+            "SignatureDoesNotMatch",
+        ):
+            return False
+
+        raise
+
+
+@lru_cache(maxsize=1)
+def get_s3_client():
+    """
+    Создание S3-клиента.
+
+    Поддерживает три режима:
+    - public: доступ к открытому бакету без ключей;
+    - private: доступ к закрытому бакету через access_key/secret_key;
+    - auto: сначала проверяем публичный доступ, затем fallback на private.
+    """
+
+    if not S3_BUCKET:
+        raise ValueError("S3_BUCKET is not set in .env")
+
+    if S3_AUTH_MODE == "public":
+        LOGGER.info(
+            "Using public unsigned S3 access for bucket: %s",
+            S3_BUCKET,
+        )
+
+        return _create_public_s3_client()
+
+    if S3_AUTH_MODE == "private":
+        LOGGER.info(
+            "Using private signed S3 access for bucket: %s",
+            S3_BUCKET,
+        )
+
+        return _create_private_s3_client()
+
+    if S3_AUTH_MODE != "auto":
+        raise ValueError(
+            "Invalid S3_AUTH_MODE. Expected one of: auto, public, private"
+        )
+
+    public_client = _create_public_s3_client()
+
+    if _can_list_bucket(public_client):
+        LOGGER.info(
+            "Bucket %s is public. Using unsigned S3 access.",
+            S3_BUCKET,
+        )
+
+        return public_client
+
+    LOGGER.info(
+        "Bucket %s is not available via public access. "
+        "Trying signed S3 access.",
+        S3_BUCKET,
+    )
+
+    return _create_private_s3_client()
 
 
 def get_clickhouse_connection():
